@@ -44,7 +44,20 @@ jobs:
         token = ${{ secrets.RCLONE_CONFIG_TOKEN }}
         EOF
 
-    - name: Sync to Google Drive
+    - name: Download existing data from GDrive
       run: |
-        # kospi_db 폴더를 구글 드라이브의 'StockData/kospi_db' 폴더로 동기화
+        # 구글 드라이브에 이미 데이터가 있다면 서버로 가져옵니다.
+        rclone copy gdrive:StockData/kospi_db ./kospi_db
+
+    - name: Run Update Script
+      env:
+        KRX_ID: ${{ secrets.KRX_ID }}
+        KRX_PW: ${{ secrets.KRX_PW }}
+      run: |
+        # 이제 ./kospi_db 폴더 안에 기존 데이터가 있으므로 daily_update.py가 이를 인식합니다.
+        python daily_update.py
+
+    - name: Sync back to Google Drive
+      run: |
+        # 업데이트된 전체 데이터를 다시 구글 드라이브로 동기화합니다.
         rclone sync ./kospi_db gdrive:StockData/kospi_db --drive-use-trash=false
