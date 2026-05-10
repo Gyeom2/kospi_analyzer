@@ -30,3 +30,21 @@ jobs:
         KRX_PW: ${{ secrets.KRX_PW }}
       run: |
         python daily_update.py
+
+    - name: Setup Rclone
+      uses: rclone/rclone-action@v1
+
+    - name: Configure Rclone
+      run: |
+        mkdir -p ~/.config/rclone
+        cat << EOF > ~/.config/rclone/rclone.conf
+        [gdrive]
+        type = drive
+        scope = drive
+        token = ${{ secrets.RCLONE_CONFIG_TOKEN }}
+        EOF
+
+    - name: Sync to Google Drive
+      run: |
+        # kospi_db 폴더를 구글 드라이브의 'StockData/kospi_db' 폴더로 동기화
+        rclone sync ./kospi_db gdrive:StockData/kospi_db --drive-use-trash=false
