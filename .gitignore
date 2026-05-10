@@ -1,0 +1,20 @@
+# config.txt 파일 제외하기
+config.txt
+
+# .txt 파일 제외
+*.txt
+
+# .png 파일 제외
+*.png
+
+# .xlsx 파일 제외
+*.xlsx
+
+# .pyc 파일 제외
+*.pyc
+
+# /reports 폴더 제외
+/reports
+
+# /templates 폴더 제외
+/templates
