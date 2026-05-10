@@ -2,9 +2,8 @@ name: Daily KOSPI Update
 
 on:
   schedule:
-    # 매일 한국 시간 오후 9시 (UTC 12시) 실행
-    - cron: '0 12 * * *'
-  workflow_dispatch: # 수동 실행 버튼 활성화
+    - cron: '0 12 * * *' # 매일 한국 시간 오후 9시
+  workflow_dispatch:
 
 jobs:
   build:
@@ -23,14 +22,6 @@ jobs:
       run: |
         pip install pandas numpy pyarrow pykrx workalendar
 
-    - name: Run Update Script
-      env:
-        # Secret에 저장한 정보를 환경 변수로 주입
-        KRX_ID: ${{ secrets.KRX_ID }}
-        KRX_PW: ${{ secrets.KRX_PW }}
-      run: |
-        python daily_update.py
-
     - name: Setup Rclone
       uses: rclone/rclone-action@v1
 
@@ -46,18 +37,19 @@ jobs:
 
     - name: Download existing data from GDrive
       run: |
-        # 구글 드라이브에 이미 데이터가 있다면 서버로 가져옵니다.
-        rclone copy gdrive:StockData/kospi_db ./kospi_db
+        # 구글 드라이브에서 기존 데이터를 먼저 가져옵니다. 
+        # 폴더가 없어도 에러가 나지 않도록 처리합니다.
+        rclone copy gdrive:StockData/kospi_db ./kospi_db || echo "No existing data found"
 
     - name: Run Update Script
       env:
         KRX_ID: ${{ secrets.KRX_ID }}
         KRX_PW: ${{ secrets.KRX_PW }}
       run: |
-        # 이제 ./kospi_db 폴더 안에 기존 데이터가 있으므로 daily_update.py가 이를 인식합니다.
+        # 업로드하신 daily_update.py의 TARGET_DB 변수가 'kospi_db' 폴더를 가리키는지 확인하세요.
         python daily_update.py
 
     - name: Sync back to Google Drive
       run: |
-        # 업데이트된 전체 데이터를 다시 구글 드라이브로 동기화합니다.
+        # 수집된 최신 데이터를 구글 드라이브에 동기화(업로드)합니다.
         rclone sync ./kospi_db gdrive:StockData/kospi_db --drive-use-trash=false
