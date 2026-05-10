@@ -1,0 +1,32 @@
+name: Daily KOSPI Update
+
+on:
+  schedule:
+    # 매일 한국 시간 오후 9시 (UTC 12시) 실행
+    - cron: '0 12 * * *'
+  workflow_dispatch: # 수동 실행 버튼 활성화
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.10'
+
+    - name: Install dependencies
+      run: |
+        pip install pandas numpy pyarrow pykrx workalendar
+
+    - name: Run Update Script
+      env:
+        # Secret에 저장한 정보를 환경 변수로 주입
+        KRX_ID: ${{ secrets.KRX_ID }}
+        KRX_PW: ${{ secrets.KRX_PW }}
+      run: |
+        python daily_update.py
