@@ -135,20 +135,26 @@ def patched_wrap_get_market_sector_classifications(date: str, market: str) -> pd
 
 
 def set_krx_auth():
+    # 1. 먼저 이미 환경변수(GitHub Secrets 등)가 설정되어 있는지 확인
+    if os.environ.get("KRX_ID") and os.environ.get("KRX_PW"):
+        print("시스템 환경 변수에서 KRX 로그인 정보를 확인했습니다.")
+        return  # 이미 있다면 파일 읽을 필요 없이 종료
+
+    # 2. 환경변수가 없다면 config.txt 파일 찾기 (로컬 환경용)
     config_path = "config.txt"
     if os.path.exists(config_path):
         with open(config_path, "r", encoding="utf-8") as f:
             for line in f:
                 if "=" in line:
                     key, value = line.strip().split('=', 1)
-                    # pykrx가 내부적으로 찾는 환경 변수명으로 설정합니다.
                     if key == "ID":
                         os.environ["KRX_ID"] = value
                     elif key == "PW":
                         os.environ["KRX_PW"] = value
-        print("KRX 로그인 정보가 설정되었습니다.")
+        print("config.txt 파일로부터 KRX 로그인 정보를 설정했습니다.")
     else:
-        print("config.txt 파일을 찾을 수 없습니다.")
+        # 파일도 없고 환경변수도 없는 진짜 에러 상황
+        print("경고: KRX 로그인 정보를 찾을 수 없습니다. (config.txt 없음 & 환경변수 미설정)")
 
 
 # 인증 정보 적용
