@@ -17,6 +17,26 @@ st.markdown("""
     """, unsafe_allow_html=True)
 
 
+def apply_sector_colors(styler):
+    # styler.data를 통해 원본 데이터프레임에 접근합니다.
+    df = styler.data
+
+    # 1. 섹터명 컬럼 확인 (데이터에 따라 '업종명' 또는 '섹터명'으로 통일)
+    sector_col = '업종명' if '업종명' in df.columns else '섹터명'
+
+    sectors = df[sector_col].unique()
+
+    # 2. 섹터별 배경색 매핑 (흰색과 연한 회색 교차)
+    sector_bg_map = {
+        sector: 'background-color: #262730; color: white;' if i % 2 == 1
+        else 'background-color: transparent; color: white;'
+        for i, sector in enumerate(sectors)
+    }
+
+    # 3. 데이터프레임 전체에 행 단위로 적용
+    return styler.apply(lambda row: [sector_bg_map.get(row[sector_col], '')] * len(row), axis=1)
+
+
 def format_date_str(date_str):
     """'YYYYMMDD' 문자열을 'YYYY년 MM월 DD일'로 변환"""
     try:
@@ -29,6 +49,7 @@ def format_date_str(date_str):
 start_date, end_date, prev_start_date, prev_end_date = collector.get_business_day()
 option_date = collector.get_predicted_next_day(end_date)
 
+db_path = "G:\내 드라이브\StockData\kospi_db"
 
 st.title("주간 코스피 분석")
 st.header(
@@ -44,6 +65,7 @@ delta_data = collector.get_intensity_delta(
     start_date, end_date, prev_start_date, prev_end_date)
 continuity_data = collector.get_supply_continuity(end_date)
 sell_data = collector.get_sell_continuity(end_date)
+kospi_52w_data = collector.analyze_52w_high_low(db_path)
 futures_data = collector.get_futures_analysis(start_date, end_date)
 program_data = collector.get_program_trading_summary(start_date, end_date)
 basis_df = collector.get_basis_analysis(start_date, end_date)
@@ -557,6 +579,66 @@ with tab4:
 
     else:
         st.error("투자자 상세 분석 데이터를 불러오는 데 실패했습니다.")
+
+    st.write(f"### 4-3. 🚀 코스피 52주 신고가/신저가 분석기")
+    if kospi_52w_data:
+        col1, col2 = st.columns(2)
+        col1.metric("🚀 52주 신고가", f"{kospi_52w_data['high_count']}개")
+        col2.metric("❄️ 52주 신저가", f"{kospi_52w_data['low_count']}개")
+
+        # 1. [상승 섹터 분석] (기존 코드 유지)
+        if kospi_52w_data['sector_rank'] is not None:
+            st.subheader("🔥 주도 섹터 (신고가 빈도 순위)")
+            sector_df = kospi_52w_data['sector_rank'].reset_index()
+            sector_df.columns = ['섹터명', '신고가 종목 수']
+            top_5_sectors = sector_df.head(5)
+
+            st.table(top_5_sectors)
+
+        # 상세 종목 표
+        st.subheader("🚀 52주 신고가 경신 상세 종목(섹터별 TOP 3)")
+        high_df = kospi_52w_data['high_df']
+
+        if not high_df.empty:
+            filtered_list = []
+            for sector in top_5_sectors['섹터명']:
+                sector_top_3 = high_df[high_df['업종명'] == sector].head(3)
+                filtered_list.append(sector_top_3)
+
+            display_df = pd.concat(filtered_list).reset_index(drop=True)
+
+            styler = display_df.style.format({'종가': '{:,.0f}'})
+            styled_df = apply_sector_colors(styler)
+            st.table(styled_df)
+        else:
+            st.write("신고가 경신 종목이 없습니다.")
+
+        # 2. [하락 섹터 및 신저가 분석] (새로 추가할 부분)
+        low_df = kospi_52w_data['low_df']
+        if not low_df.empty and '업종명' in low_df.columns:
+            st.subheader("❄️ 하락 섹터 (신저가 빈도 순위)")
+            # 신저가 빈도 계산
+            low_sector_rank = low_df['업종명'].value_counts().reset_index()
+            low_sector_rank.columns = ['섹터명', '신저가 종목 수']
+            top_5_low_sectors = low_sector_rank.head(5)
+
+            st.table(top_5_low_sectors)
+
+            st.markdown("#### ❄️ 신저가 경신 상세 종목 (섹터별 TOP 3)")
+
+            low_filtered = []
+            for sector in top_5_low_sectors['섹터명']:
+                s_df = low_df[low_df['업종명'] == sector].head(3)
+                low_filtered.append(s_df)
+
+            if low_filtered:
+                display_low = pd.concat(low_filtered).reset_index(drop=True)
+                # 스타일 적용 (다크모드용 배경색 교차 적용)
+                st.table(apply_sector_colors(
+                    display_low.style.format({'종가': '{:,.0f}'})))
+        else:
+            st.subheader("📉 소외 섹터")
+            st.info("신저가 경신 종목이 없어 분석할 데이터가 없습니다.")
 
 # ---------------------------------------------------------
 # Tab 5: 파생상품 및 지표 (5. 선물/프로그램, 6. 옵션/PCR/MaxPain, 7. 채권)

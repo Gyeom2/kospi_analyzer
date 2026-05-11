@@ -914,6 +914,52 @@ def get_sell_continuity(end_date):
 
 
 @st.cache_data
+def analyze_52w_high_low(db_path):
+    """52주 신고가/신저가 및 섹터 분석 데이터를 반환하는 함수"""
+    try:
+        # 1. 파티셔닝된 전체 데이터 로드
+        if not os.path.exists(db_path):
+            return None
+
+        df = pd.read_parquet(db_path)
+        df = df.sort_values(['종목코드', '일자'])
+
+        # 2. 52주(약 250영업일) 기준 최고가/최저가 계산
+        window = 250
+        df['52W_High'] = df.groupby('종목코드')['고가'].transform(
+            lambda x: x.rolling(window=window, min_periods=1).max()
+        )
+        df['52W_Low'] = df.groupby('종목코드')['저가'].transform(
+            lambda x: x.rolling(window=window, min_periods=1).min()
+        )
+
+        # 3. 가장 최근 날짜 데이터 추출
+        latest_date = df['일자'].max()
+        today_df = df[df['일자'] == latest_date].copy()
+
+        # 4. 신고가/신저가 종목 판별
+        high_breakouts = today_df[today_df['고가'] >= today_df['52W_High']]
+        low_breakouts = today_df[today_df['저가'] <= today_df['52W_Low']]
+
+        # 5. 결과 데이터 구조화 (UI 전달용)
+        result = {
+            "date": latest_date,
+            "high_count": len(high_breakouts),
+            "low_count": len(low_breakouts),
+            "high_df": high_breakouts[['종목코드', '종목명', '업종명', '종가']],
+            "low_df": low_breakouts[['종목코드', '종목명', '업종명', '종가']],
+            "sector_rank": high_breakouts['업종명'].value_counts() if '업종명' in high_breakouts.columns else None,
+            "raw_df": today_df  # 전체 요약 데이터가 필요할 경우 대비
+        }
+
+        return result
+
+    except Exception as e:
+        st.error(f"52주 데이터 분석 중 오류 발생: {e}")
+        return None
+
+
+@st.cache_data
 def get_futures_analysis(start_date, end_date):
     """
     코스피200 선물 가격 추이, 미결제약정 및 투자자별 매매동향 수집 및 분석

@@ -72,5 +72,5 @@ def run_daily_update(db_path):
 
 if __name__ == "__main__":
     # 파일명이 아닌 '폴더명'을 지정합니다.
-    TARGET_DB = 'kospi_db'
+    TARGET_DB = '/kospi_db'
     run_daily_update(TARGET_DB)
