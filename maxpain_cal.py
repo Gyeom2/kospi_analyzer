@@ -12,7 +12,7 @@ import plotly.graph_objects as go
 
 import streamlit as st
 
-from collector import set_krx_auth, get_business_day, get_max_pain_analysis, get_predicted_next_day, get_futures_analysis
+from collector import set_krx_auth, get_business_day, get_predicted_next_day, get_futures_analysis
 
 
 set_krx_auth()
@@ -107,16 +107,82 @@ class 옵션최근월물시세추이(KrxWebIo):
         return df.set_index('종목명')
 
 
+@st.cache_data
+def get_max_pain_analysis(date):
+    """
+    특정 날짜의 옵션 시세 데이터를 바탕으로 맥스페인(Max Pain) 가격을 계산합니다.
+    281라인의 '옵션최근월물시세추이' 클래스 결과물을 활용합니다.
+    """
+    try:
+        io_price = 옵션최근월물시세추이()
+        # 281라인 클래스를 활용해 전체 옵션 시세(ALL)를 가져옵니다.
+        # 옵션최근월물시세추이의 경우 5/8(금) 야간에 이루어진 거래는 5/11(월) 야간으로 조회할 수 있음
+        # 가장 마지막 영업일에서 그 다음 시작 영업일, 야간으로 조회해야 최신 옵션 데이터 현황을 조회할 수 있음
+
+        df_options = io_price.fetch(date, right_type="ALL")
+        # print(f"date: {date}")
+
+        if df_options.empty:
+            return None
+
+        # 1. 행사가 리스트 추출 및 정렬
+        # fetch 메서드에서 이미 '행사가' 컬럼이 생성되어 있으므로 이를 활용합니다.
+        strikes = sorted(df_options['행사가'].unique())
+
+        # 2. 콜/풋 데이터 분리 (fetch 메서드의 '구분' 컬럼 활용)
+        df_call = df_options[df_options['구분'] == '콜']
+        df_put = df_options[df_options['구분'] == '풋']
+
+        pain_values = []
+
+        # 3. 각 행사가별로 만기 시 총 가치(매도자 지급액) 계산
+        for s in strikes:
+            # 콜옵션 페이오프 합계: Max(0, 만기지수 - 행사가) * 미결제약정
+            call_loss = df_call.apply(
+                lambda x: max(0, s - x['행사가']) * x['미결제약정'], axis=1
+            ).sum()
+
+            # 풋옵션 페이오프 합계: Max(0, 행사가 - 만기지수) * 미결제약정
+            put_loss = df_put.apply(
+                lambda x: max(0, x['행사가'] - s) * x['미결제약정'], axis=1
+            ).sum()
+
+            pain_values.append(call_loss + put_loss)
+
+        # 4. 총 손실이 최소가 되는 지점(Min)의 인덱스를 찾아 행사가 반환
+        min_pain_index = np.argmin(pain_values)
+        max_pain_price = strikes[min_pain_index]
+
+        # 5. 결과 구조화
+        pain_df = pd.DataFrame({
+            '행사가': strikes,
+            '고통지수': pain_values
+        })
+
+        return {
+            "max_pain": max_pain_price,
+            "pain_df": pain_df,
+            # 시각화 등에 활용할 데이터셋
+            "calls": df_call[['행사가', '미결제약정', '종가']],
+            "puts": df_put[['행사가', '미결제약정', '종가']]
+        }
+
+    except Exception as e:
+        st.error(f"맥스페인 계산 중 오류 발생: {e}")
+        return None
+
+
 start_date, end_date, prev_start_date, prev_end_date = get_business_day()
 option_date = get_predicted_next_day(end_date)
 
-futures_data = get_futures_analysis(start_date, end_date)
+# futures_data = get_futures_analysis(start_date, end_date)
+futures_data = get_futures_analysis("20260512", "20260512")
 # max_pain_data = get_max_pain_analysis(option_date)
-max_pain_data = get_max_pain_analysis("20260511")
+max_pain_data = get_max_pain_analysis("20260512")
 
-print(f"start_date: {start_date}")
-print(f"end_date: {end_date}")
-print(f"option_date: {option_date}")
+# print(f"start_date: {start_date}")
+# print(f"end_date: {end_date}")
+# print(f"option_date: {option_date}")
 
 st.write("#### 🎯 옵션 맥스페인(Max Pain) 분석")
 
