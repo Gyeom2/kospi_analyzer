@@ -1,0 +1,61 @@
+name: Daily Bond Yields Update
+
+on:
+  schedule:
+    # 매일 평일(월-금) 한국 시간 오후 5시 30분(비즈니스 마감 후) 실행 트리거
+    # UTC 기준 오전 8시 30분 = 한국 시간(KST) 오후 5시 30분
+    - cron: '30 8 * * 1-5'
+  workflow_dispatch: # 필요할 때 수동으로도 실행 가능하게 설정
+
+jobs:
+  update-bonds:
+    runs-on: ubuntu-latest
+
+    steps:
+    # 1. 깃허브 레포지토리 코드 체크아웃
+    - name: Checkout Repository
+      uses: actions/checkout@v4
+
+    # 2. 파이썬 환경 셋업 (기존 프로젝트 버전 맞춤)
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.10' # 사용 중인 파이썬 버전에 맞게 수정하세요.
+
+    # 3. 의존성 패키지 및 rclone 설치
+    - name: Install Dependencies & Rclone
+      run: |
+        python -m pip install --upgrade pip
+        pip install pandas numpy pyarrow workalendar pykrx requests
+        sudo apt-get install rclone -y
+
+    # 4. Rclone 설정 파일 복원 (기존 Secret 재사용)
+    - name: Configure Rclone
+      run: |
+        mkdir -p ~/.config/rclone
+        echo "${{ secrets.RCLONE_CONFIG_DATA }}" > ~/.config/rclone/rclone.conf
+
+    # 5. 구글 드라이브에 있는 기존 BondsData 저장소를 가상환경 워크스페이스로 다운로드 (동기화 준비)
+    # 기존 데이터가 밀리지 않고 인크리멘탈하게 합쳐지기 위한 필수 단계입니다.
+    - name: Download Existing Bonds Data
+      run: |
+        if rclone lsd gdrive:BondsData-Backup; then
+          rclone copy gdrive:BondsData-Backup ./BondsData
+          echo "기존 채권 데이터를 구글 드라이브에서 성공적으로 내려받았습니다."
+        else
+          echo "기존 원격 저장소가 비어있어 새로 생성합니다."
+        fi
+
+    # 6. 매일 업데이트 파이썬 스크립트 실행
+    - name: Run Daily Bond Update Script
+      env:
+        KRX_ID: ${{ secrets.KRX_ID }}
+        KRX_PW: ${{ secrets.KRX_PW }}
+      run: |
+        python bond_daily_update.py
+
+    # 7. 업데이트 완료된 로컬 'BondsData' 폴더를 구글 드라이브로 최종 업로드 및 동기화
+    - name: Sync Updated Data to Google Drive
+      run: |
+        rclone sync ./BondsData gdrive:BondsData-Backup --progress
+        echo "구글 드라이브 채권 데이터 동기화가 완료되었습니다."
