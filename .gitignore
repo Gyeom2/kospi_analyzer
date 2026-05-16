@@ -21,3 +21,9 @@ config.txt
 
 # maxpain_cal.py 제외
 maxpain_cal.py
+
+# BondsData 폴더 제외
+/BondsData
+
+# kospi_db 폴더 제외
+/kospi_db
