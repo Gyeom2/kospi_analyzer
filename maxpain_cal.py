@@ -12,7 +12,7 @@ import plotly.graph_objects as go
 
 import streamlit as st
 
-from collector import set_krx_auth, get_business_day, get_predicted_next_day, get_futures_analysis
+from collector import set_krx_auth, get_business_day, get_predicted_next_day, 선물최근월물시세, 선물투자자별거래실적
 
 
 set_krx_auth()
@@ -38,7 +38,7 @@ class 옵션최근월물시세추이(KrxWebIo):
         result = self.read(
             bld=self.bld,
             prodId=ticker,      # 상품 ID
-            aggBasTpCd="0",     # "": 전체, "0": 정규, "2": 야간
+            aggBasTpCd="2",     # "": 전체, "0": 정규, "2": 야간
             strtDd=date,        # 시작일
             endDd=date,          # 종료일
             rghtTpCd=right_type,  # 권리구분
@@ -172,13 +172,70 @@ def get_max_pain_analysis(date):
         return None
 
 
+@st.cache_data
+def get_futures_analysis(start_date, end_date):
+    """
+    코스피200 선물 가격 추이, 미결제약정 및 투자자별 매매동향 수집 및 분석
+    """
+    try:
+        # 1. 선물 가격 추이 데이터
+        io_trend = 선물최근월물시세()
+        df_trend = io_trend.fetch(start_date, end_date)
+        df_price_trend = df_trend[df_trend.index.str.contains("야간")].copy()
+
+        # 2. 미결제약정 상관관계 분석 로직 추가
+        oi_interpretation = None
+        if len(df_price_trend) >= 2:
+            curr = df_price_trend.iloc[-1]
+            prev = df_price_trend.iloc[0]
+
+            p_diff = curr['종가'] - prev['종가']
+            o_diff = curr['미결제약정'] - prev['미결제약정']
+
+            # 국면 판단
+            if p_diff > 0 and o_diff > 0:
+                phase, desc = "강세 시장", "신규 매수 유입으로 상승세 강화"
+            elif p_diff > 0 and o_diff < 0:
+                phase, desc = "기술적 반등", "숏커버링(매도 포지션 청산)에 의한 일시적 상승"
+            elif p_diff < 0 and o_diff > 0:
+                phase, desc = "약세 시장", "신규 매도 유입으로 하락세 강화"
+            elif p_diff < 0 and o_diff < 0:
+                phase, desc = "하락 둔화", "롱청산(매수 포지션 이익실현/손절)으로 인한 하락"
+            else:
+                phase, desc = "방향성 탐색", "지수 및 미결제약정 변화가 미미함"
+
+            oi_interpretation = {
+                "phase": phase,
+                "desc": desc,
+                "p_diff": p_diff,
+                "o_diff": o_diff
+            }
+
+        # 3. 투자자별 선물 매매동향
+        io_investor = 선물투자자별거래실적()
+        df_future_raw = io_investor.fetch(start_date, end_date)
+
+        target_investors = ["기관합계", "기타법인", "개인", "외국인"]
+        df_future_investor = df_future_raw.reindex(target_investors).fillna(0)
+
+        return {
+            # 여기에 미결제약정 컬럼이 포함되어 있음
+            "price_trend": df_price_trend,
+            "investor_trend": df_future_investor,
+            "oi_analysis": oi_interpretation    # 분석 결과 추가
+        }
+    except Exception as e:
+        print(f"선물 데이터 분석 중 오류 발생: {e}")
+        return None
+
+
 start_date, end_date, prev_start_date, prev_end_date = get_business_day()
 option_date = get_predicted_next_day(end_date)
 
 # futures_data = get_futures_analysis(start_date, end_date)
-futures_data = get_futures_analysis("20260512", "20260512")
+futures_data = get_futures_analysis("20260515", "20260515")
 # max_pain_data = get_max_pain_analysis(option_date)
-max_pain_data = get_max_pain_analysis("20260512")
+max_pain_data = get_max_pain_analysis("20260518")
 
 # print(f"start_date: {start_date}")
 # print(f"end_date: {end_date}")
