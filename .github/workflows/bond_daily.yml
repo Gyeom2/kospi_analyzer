@@ -39,8 +39,8 @@ jobs:
     # 기존 데이터가 밀리지 않고 인크리멘탈하게 합쳐지기 위한 필수 단계입니다.
     - name: Download Existing Bonds Data
       run: |
-        if rclone lsd gdrive:BondsData-Backup; then
-          rclone copy gdrive:BondsData-Backup ./BondsData
+        if rclone lsd gdrive:BondsData; then
+          rclone copy gdrive:BondsData ./BondsData
           echo "기존 채권 데이터를 구글 드라이브에서 성공적으로 내려받았습니다."
         else
           echo "기존 원격 저장소가 비어있어 새로 생성합니다."
@@ -57,5 +57,5 @@ jobs:
     # 7. 업데이트 완료된 로컬 'BondsData' 폴더를 구글 드라이브로 최종 업로드 및 동기화
     - name: Sync Updated Data to Google Drive
       run: |
-        rclone sync ./BondsData gdrive:BondsData-Backup --progress
+        rclone sync ./BondsData gdrive:BondsData --progress
         echo "구글 드라이브 채권 데이터 동기화가 완료되었습니다."
